@@ -1,44 +1,362 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>Cross-Browser QRCode generator for Javascript</title>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-<script type="text/javascript" src="jquery.min.js"></script>
-<script type="text/javascript" src="qrcode.js"></script>
+	<title>QRCode.js – Shape Customization</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+	<style>
+		:root {
+			color-scheme: light;
+			--bg: #f4f1ea;
+			--panel: #fffdf8;
+			--ink: #1c1916;
+			--muted: #6b645c;
+			--line: #e4ddd3;
+			--accent: #2b6cb0;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			font-family: "Segoe UI", system-ui, sans-serif;
+			background: var(--bg);
+			color: var(--ink);
+		}
+		.wrap {
+			max-width: 960px;
+			margin: 0 auto;
+			padding: 32px 20px 64px;
+		}
+		h1 {
+			font-size: 1.6rem;
+			margin: 0 0 8px;
+		}
+		.lede {
+			color: var(--muted);
+			margin: 0 0 28px;
+			max-width: 42em;
+		}
+		.layout {
+			display: grid;
+			grid-template-columns: minmax(240px, 320px) 1fr;
+			gap: 28px;
+			align-items: start;
+		}
+		.preview {
+			background: var(--panel);
+			border: 1px solid var(--line);
+			border-radius: 16px;
+			padding: 24px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 12px;
+		}
+		#qrcode {
+			width: 256px;
+			height: 256px;
+			border-radius: 8px;
+		}
+		#qrcode.checkerboard {
+			background-color: #efe8dc;
+			background-image:
+				linear-gradient(45deg, #cfc4b3 25%, transparent 25%),
+				linear-gradient(-45deg, #cfc4b3 25%, transparent 25%),
+				linear-gradient(45deg, transparent 75%, #cfc4b3 75%),
+				linear-gradient(-45deg, transparent 75%, #cfc4b3 75%);
+			background-size: 16px 16px;
+			background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+		}
+		#qrcode img, #qrcode canvas, #qrcode svg {
+			width: 256px !important;
+			height: 256px !important;
+			background: transparent;
+		}
+		.controls {
+			background: var(--panel);
+			border: 1px solid var(--line);
+			border-radius: 16px;
+			padding: 20px;
+		}
+		label {
+			display: block;
+			font-size: 0.8rem;
+			font-weight: 600;
+			margin: 14px 0 6px;
+			color: var(--muted);
+		}
+		label:first-child { margin-top: 0; }
+		input[type="text"], select, input[type="color"] {
+			width: 100%;
+			padding: 8px 10px;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			font: inherit;
+			background: #fff;
+		}
+		.colors {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 12px;
+		}
+		.presets {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-top: 18px;
+		}
+		.presets button {
+			border: 1px solid var(--line);
+			background: #fff;
+			border-radius: 999px;
+			padding: 6px 12px;
+			cursor: pointer;
+			font: inherit;
+			font-size: 0.85rem;
+		}
+		.presets button:hover,
+		.exports button:hover { border-color: var(--accent); color: var(--accent); }
+		.check {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-top: 16px;
+			font-size: 0.9rem;
+		}
+		.check input { width: auto; }
+		.check label { margin: 0; color: var(--ink); font-weight: 500; }
+		.exports {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-top: 16px;
+			align-items: center;
+		}
+		.exports button, .exports select {
+			border: 1px solid var(--line);
+			background: #fff;
+			border-radius: 999px;
+			padding: 8px 14px;
+			cursor: pointer;
+			font: inherit;
+			font-size: 0.85rem;
+			width: auto;
+		}
+		code {
+			font-size: 0.85em;
+			background: #efe8dc;
+			padding: 1px 5px;
+			border-radius: 4px;
+		}
+		pre {
+			margin: 18px 0 0;
+			padding: 14px;
+			background: #1c1916;
+			color: #f4f1ea;
+			border-radius: 12px;
+			overflow: auto;
+			font-size: 0.78rem;
+			line-height: 1.45;
+		}
+		@media (max-width: 720px) {
+			.layout { grid-template-columns: 1fr; }
+		}
+	</style>
+	<script type="text/javascript" src="qrcode.js"></script>
 </head>
 <body>
-<input id="text" type="text" value="http://jindo.dev.naver.com/collie" style="width:80%" /><br />
-<div id="qrcode" style="width:100px; height:100px; margin-top:15px;"></div>
+	<div class="wrap">
+		<h1>QR Code shape options</h1>
+		<p class="lede">Customize the data modules, finder markers, inner eyes, and alignment (edge) markers. Square remains the default so existing codes stay unchanged.</p>
 
-<script type="text/javascript">
-var qrcode = new QRCode(document.getElementById("qrcode"), {
-	width : 100,
-	height : 100
-});
+		<div class="layout">
+			<div class="preview">
+				<div id="qrcode"></div>
+				<small>Scan to verify the code still reads.</small>
+			</div>
+			<div class="controls">
+				<label for="text">Text</label>
+				<input id="text" type="text" value="https://github.com/davidshimjs/qrcodejs" />
 
-function makeCode () {		
-	var elText = document.getElementById("text");
-	
-	if (!elText.value) {
-		alert("Input a text");
-		elText.focus();
-		return;
-	}
-	
-	qrcode.makeCode(elText.value);
-}
+				<label for="moduleShape">Modules (data blocks)</label>
+				<select id="moduleShape">
+					<option value="square">Square</option>
+					<option value="rounded" selected>Rounded</option>
+					<option value="extra-rounded">Extra rounded</option>
+					<option value="dots">Dots / circles</option>
+					<option value="diamond">Diamond</option>
+				</select>
 
-makeCode();
+				<label for="markerShape">Finder markers</label>
+				<select id="markerShape">
+					<option value="square">Square</option>
+					<option value="rounded" selected>Rounded</option>
+					<option value="extra-rounded">Extra rounded</option>
+					<option value="circle">Circle</option>
+					<option value="leaf">Leaf</option>
+				</select>
 
-$("#text").
-	on("blur", function () {
-		makeCode();
-	}).
-	on("keydown", function (e) {
-		if (e.keyCode == 13) {
+				<label for="markerInnerShape">Finder eyes (inner)</label>
+				<select id="markerInnerShape">
+					<option value="">Match finder</option>
+					<option value="square">Square</option>
+					<option value="rounded">Rounded</option>
+					<option value="extra-rounded">Extra rounded</option>
+					<option value="circle" selected>Circle</option>
+					<option value="diamond">Diamond</option>
+				</select>
+
+				<label for="alignmentShape">Alignment / edge markers</label>
+				<select id="alignmentShape">
+					<option value="">Match finder</option>
+					<option value="square">Square</option>
+					<option value="rounded">Rounded</option>
+					<option value="extra-rounded">Extra rounded</option>
+					<option value="circle" selected>Circle</option>
+				</select>
+
+				<div class="colors">
+					<div>
+						<label for="colorDark">Dark</label>
+						<input id="colorDark" type="color" value="#1c1916" />
+					</div>
+					<div>
+						<label for="colorLight">Light</label>
+						<input id="colorLight" type="color" value="#fffdf8" />
+					</div>
+				</div>
+
+				<div class="check">
+					<input id="transparent" type="checkbox" />
+					<label for="transparent">Transparent background</label>
+				</div>
+
+				<div class="presets">
+					<button type="button" data-preset="classic">Classic</button>
+					<button type="button" data-preset="round">Round</button>
+					<button type="button" data-preset="dots">Dots</button>
+					<button type="button" data-preset="leaf">Leaf</button>
+				</div>
+
+				<div class="exports">
+					<button type="button" id="downloadSvg">Download SVG</button>
+					<button type="button" id="downloadPng">Download PNG</button>
+					<select id="pngSize" aria-label="PNG size">
+						<option value="1024">1024 px</option>
+						<option value="2048" selected>2048 px</option>
+						<option value="4096">4096 px</option>
+					</select>
+				</div>
+
+				<pre id="snippet"></pre>
+			</div>
+		</div>
+	</div>
+
+	<script type="text/javascript">
+		var qrcode = null;
+		var presets = {
+			classic: { moduleShape: "square", markerShape: "square", markerInnerShape: "", alignmentShape: "" },
+			round: { moduleShape: "rounded", markerShape: "rounded", markerInnerShape: "circle", alignmentShape: "circle" },
+			dots: { moduleShape: "dots", markerShape: "circle", markerInnerShape: "circle", alignmentShape: "circle" },
+			leaf: { moduleShape: "extra-rounded", markerShape: "leaf", markerInnerShape: "diamond", alignmentShape: "rounded" }
+		};
+
+		function currentOptions() {
+			var options = {
+				text: document.getElementById("text").value || "QRCode.js",
+				width: 256,
+				height: 256,
+				colorDark: document.getElementById("colorDark").value,
+				colorLight: document.getElementById("colorLight").value,
+				transparent: document.getElementById("transparent").checked,
+				correctLevel: QRCode.CorrectLevel.H,
+				moduleShape: document.getElementById("moduleShape").value,
+				markerShape: document.getElementById("markerShape").value
+			};
+			var inner = document.getElementById("markerInnerShape").value;
+			var alignment = document.getElementById("alignmentShape").value;
+			if (inner) {
+				options.markerInnerShape = inner;
+			}
+			if (alignment) {
+				options.alignmentShape = alignment;
+			}
+			return options;
+		}
+
+		function renderSnippet(options) {
+			var shown = {
+				text: options.text,
+				width: options.width,
+				height: options.height,
+				colorDark: options.colorDark,
+				moduleShape: options.moduleShape,
+				markerShape: options.markerShape
+			};
+			if (options.transparent) {
+				shown.transparent = true;
+			} else {
+				shown.colorLight = options.colorLight;
+			}
+			if (options.markerInnerShape) {
+				shown.markerInnerShape = options.markerInnerShape;
+			}
+			if (options.alignmentShape) {
+				shown.alignmentShape = options.alignmentShape;
+			}
+			document.getElementById("snippet").textContent =
+				"new QRCode(el, " + JSON.stringify(shown, null, 2) + ");\n\n" +
+				"qrcode.downloadSVG();\n" +
+				"qrcode.downloadPNG(\"qrcode.png\", 2048);";
+		}
+
+		function makeCode() {
+			var el = document.getElementById("qrcode");
+			var options = currentOptions();
+			el.innerHTML = "";
+			el.className = options.transparent ? "checkerboard" : "";
+			document.getElementById("colorLight").disabled = options.transparent;
+			qrcode = new QRCode(el, options);
+			renderSnippet(options);
+		}
+
+		function applyPreset(name) {
+			var preset = presets[name];
+			if (!preset) {
+				return;
+			}
+			document.getElementById("moduleShape").value = preset.moduleShape;
+			document.getElementById("markerShape").value = preset.markerShape;
+			document.getElementById("markerInnerShape").value = preset.markerInnerShape;
+			document.getElementById("alignmentShape").value = preset.alignmentShape;
 			makeCode();
 		}
-	});
-</script>
+
+		["text", "moduleShape", "markerShape", "markerInnerShape", "alignmentShape", "colorDark", "colorLight", "transparent"].forEach(function (id) {
+			document.getElementById(id).addEventListener("input", makeCode);
+			document.getElementById(id).addEventListener("change", makeCode);
+		});
+
+		document.querySelectorAll("[data-preset]").forEach(function (button) {
+			button.addEventListener("click", function () {
+				applyPreset(button.getAttribute("data-preset"));
+			});
+		});
+
+		document.getElementById("downloadSvg").addEventListener("click", function () {
+			if (qrcode) {
+				qrcode.downloadSVG("qrcode.svg");
+			}
+		});
+
+		document.getElementById("downloadPng").addEventListener("click", function () {
+			var size = parseInt(document.getElementById("pngSize").value, 10) || 2048;
+			if (qrcode) {
+				qrcode.downloadPNG("qrcode.png", size);
+			}
+		});
+
+		makeCode();
+	</script>
 </body>
+</html>

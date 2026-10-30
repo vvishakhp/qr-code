@@ -1,46 +1,69 @@
 # QRCode.js
-QRCode.js is javascript library for making QRCode. QRCode.js supports Cross-browser with HTML5 Canvas and table tag in DOM.
-QRCode.js has no dependencies.
 
-## Basic Usages
-```
+JavaScript QR code generator with custom shapes, a transparent background, and SVG / PNG export. No dependencies.
+
+**Live demo:** [https://vvishakhp.github.io/qr-code/](https://vvishakhp.github.io/qr-code/)
+
+Based on [davidshimjs/qrcodejs](https://github.com/davidshimjs/qrcodejs).
+
+## Basic usage
+
+```html
 <div id="qrcode"></div>
-<script type="text/javascript">
-new QRCode(document.getElementById("qrcode"), "http://jindo.dev.naver.com/collie");
+<script src="qrcode.js"></script>
+<script>
+new QRCode(document.getElementById("qrcode"), "https://example.com");
 </script>
 ```
 
-or with some options
+or with options:
 
-```
-<div id="qrcode"></div>
-<script type="text/javascript">
+```javascript
 var qrcode = new QRCode(document.getElementById("qrcode"), {
-	text: "http://jindo.dev.naver.com/collie",
-	width: 128,
-	height: 128,
-	colorDark : "#000000",
-	colorLight : "#ffffff",
-	correctLevel : QRCode.CorrectLevel.H
+  text: "https://example.com",
+  width: 256,
+  height: 256,
+  colorDark: "#000000",
+  colorLight: "#ffffff",
+  transparent: false,
+  correctLevel: QRCode.CorrectLevel.H,
+  moduleShape: "rounded",
+  markerShape: "circle",
+  markerInnerShape: "circle",
+  alignmentShape: "circle"
 });
-</script>
 ```
 
-and you can use some methods
+## Shape options
 
-```
-qrcode.clear(); // clear the code.
-qrcode.makeCode("http://naver.com"); // make another code.
+| Option | Values | Default |
+| --- | --- | --- |
+| `moduleShape` | `square`, `rounded`, `extra-rounded`, `dots`, `diamond` | `square` |
+| `markerShape` | `square`, `rounded`, `extra-rounded`, `circle`, `leaf` | `square` |
+| `markerInnerShape` | `square`, `rounded`, `extra-rounded`, `circle`, `diamond` | matches `markerShape` |
+| `alignmentShape` | `square`, `rounded`, `extra-rounded`, `circle` | matches `markerShape` |
+
+Set `transparent: true` (or `colorLight: "transparent"`) to skip the light fill. Finder and alignment holes stay cut out.
+
+## Export
+
+```javascript
+qrcode.downloadSVG("qrcode.svg");
+qrcode.downloadPNG("qrcode.png", 2048); // 1024, 2048, 4096, ...
+
+var svg = qrcode.getSVG();
+var pngDataUrl = qrcode.getDataURL(2048);
 ```
 
-## Browser Compatibility
-IE6~10, Chrome, Firefox, Safari, Opera, Mobile Safari, Android, Windows Mobile, ETC.
+SVG is vector and stays sharp at any size. PNG keeps the alpha channel when the background is transparent.
+
+## Other methods
+
+```javascript
+qrcode.clear();
+qrcode.makeCode("https://example.com");
+```
 
 ## License
+
 MIT License
-
-## Contact
-twitter @davidshimjs
-
-[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/davidshimjs/qrcodejs/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
-

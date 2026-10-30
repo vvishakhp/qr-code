@@ -171,6 +171,539 @@ var QRCode;
 		
 		return android;
 	}
+
+	//---------------------------------------------------------------------
+	// QR module / marker shape helpers
+	//---------------------------------------------------------------------
+
+	function _normalizeShape(shape, fallback) {
+		if (!shape || typeof shape !== "string") {
+			return fallback || "square";
+		}
+
+		shape = shape.toLowerCase();
+
+		if (shape === "dot") {
+			shape = "dots";
+		} else if (shape === "round") {
+			shape = "rounded";
+		} else if (shape === "extra-round" || shape === "extrarounded") {
+			shape = "extra-rounded";
+		} else if (shape === "classy") {
+			shape = "leaf";
+		}
+
+		return shape;
+	}
+
+	function _isTransparentBackground(option) {
+		var light;
+
+		if (option && option.transparent === true) {
+			return true;
+		}
+
+		light = option && option.colorLight != null ? String(option.colorLight).toLowerCase() : "";
+		return light === "transparent" || light === "rgba(0,0,0,0)";
+	}
+
+	function _resolveShapes(option) {
+		var moduleShape = _normalizeShape(option.moduleShape, "square");
+		var markerShape = _normalizeShape(option.markerShape, "square");
+		var markerInnerShape = _normalizeShape(option.markerInnerShape, markerShape === "leaf" ? "square" : markerShape);
+		var alignmentShape = _normalizeShape(option.alignmentShape, markerShape);
+
+		if (moduleShape === "circle") {
+			moduleShape = "dots";
+		}
+		if (markerShape === "dots") {
+			markerShape = "circle";
+		}
+		if (markerInnerShape === "dots") {
+			markerInnerShape = "circle";
+		}
+		if (alignmentShape === "dots") {
+			alignmentShape = "circle";
+		}
+
+		return {
+			module: moduleShape,
+			marker: markerShape,
+			markerInner: markerInnerShape,
+			alignment: alignmentShape
+		};
+	}
+
+	function _isFinderModule(row, col, nCount) {
+		if (row < 7 && col < 7) {
+			return true;
+		}
+		if (row < 7 && col >= nCount - 7) {
+			return true;
+		}
+		if (row >= nCount - 7 && col < 7) {
+			return true;
+		}
+		return false;
+	}
+
+	function _alignmentCenters(typeNumber, nCount) {
+		var pos = QRUtil.getPatternPosition(typeNumber);
+		var centers = [];
+		var i, j, row, col;
+
+		if (!pos || !pos.length) {
+			return centers;
+		}
+
+		for (i = 0; i < pos.length; i++) {
+			for (j = 0; j < pos.length; j++) {
+				row = pos[i];
+				col = pos[j];
+				if (_isFinderModule(row, col, nCount)) {
+					continue;
+				}
+				centers.push({ row: row, col: col });
+			}
+		}
+
+		return centers;
+	}
+
+	function _isAlignmentModule(row, col, centers) {
+		var i;
+		for (i = 0; i < centers.length; i++) {
+			if (Math.abs(row - centers[i].row) <= 2 && Math.abs(col - centers[i].col) <= 2) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function _moduleNeighbors(oQRCode, row, col) {
+		var nCount = oQRCode.getModuleCount();
+		return {
+			t: row > 0 && oQRCode.isDark(row - 1, col),
+			r: col < nCount - 1 && oQRCode.isDark(row, col + 1),
+			b: row < nCount - 1 && oQRCode.isDark(row + 1, col),
+			l: col > 0 && oQRCode.isDark(row, col - 1)
+		};
+	}
+
+	function _clampRadius(r, w, h) {
+		return Math.max(0, Math.min(r || 0, w / 2, h / 2));
+	}
+
+	function _shapeCornerRadii(shape, size) {
+		var r;
+		switch (shape) {
+			case "rounded":
+				r = size * 0.2;
+				return { tl: r, tr: r, br: r, bl: r };
+			case "extra-rounded":
+				r = size * 0.35;
+				return { tl: r, tr: r, br: r, bl: r };
+			case "leaf":
+				r = size * 0.45;
+				return { tl: r, tr: 0, br: r, bl: 0 };
+			default:
+				return { tl: 0, tr: 0, br: 0, bl: 0 };
+		}
+	}
+
+	function _canvasRoundRect(ctx, x, y, w, h, rtl, rtr, rbr, rbl) {
+		rtl = _clampRadius(rtl, w, h);
+		rtr = _clampRadius(rtr, w, h);
+		rbr = _clampRadius(rbr, w, h);
+		rbl = _clampRadius(rbl, w, h);
+
+		ctx.moveTo(x + rtl, y);
+		ctx.lineTo(x + w - rtr, y);
+		ctx.arcTo(x + w, y, x + w, y + h, rtr);
+		ctx.lineTo(x + w, y + h - rbr);
+		ctx.arcTo(x + w, y + h, x, y + h, rbr);
+		ctx.lineTo(x + rbl, y + h);
+		ctx.arcTo(x, y + h, x, y, rbl);
+		ctx.lineTo(x, y + rtl);
+		ctx.arcTo(x, y, x + w, y, rtl);
+		ctx.closePath();
+	}
+
+	function _canvasAddShapePath(ctx, x, y, w, h, shape) {
+		var radii;
+
+		if (shape === "circle") {
+			ctx.moveTo(x + w, y + h / 2);
+			if (typeof ctx.ellipse === "function") {
+				ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+			} else {
+				ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+			}
+			ctx.closePath();
+			return;
+		}
+
+		if (shape === "diamond") {
+			ctx.moveTo(x + w / 2, y);
+			ctx.lineTo(x + w, y + h / 2);
+			ctx.lineTo(x + w / 2, y + h);
+			ctx.lineTo(x, y + h / 2);
+			ctx.closePath();
+			return;
+		}
+
+		radii = _shapeCornerRadii(shape, Math.min(w, h));
+		_canvasRoundRect(ctx, x, y, w, h, radii.tl, radii.tr, radii.br, radii.bl);
+	}
+
+	function _canvasFillShape(ctx, x, y, w, h, shape, color) {
+		ctx.fillStyle = color;
+		ctx.beginPath();
+		_canvasAddShapePath(ctx, x, y, w, h, shape);
+		ctx.fill();
+	}
+
+	function _canvasFillRing(ctx, x, y, outerW, outerH, insetX, insetY, innerW, innerH, shape, color) {
+		ctx.fillStyle = color;
+		ctx.beginPath();
+		_canvasAddShapePath(ctx, x, y, outerW, outerH, shape);
+		_canvasAddShapePath(ctx, x + insetX, y + insetY, innerW, innerH, shape);
+		ctx.fill("evenodd");
+	}
+
+	function _canvasFillModule(ctx, x, y, w, h, shape, neighbors) {
+		var radiusRatio;
+
+		if (shape === "dots") {
+			ctx.beginPath();
+			ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) * 0.4, 0, Math.PI * 2);
+			ctx.fill();
+			return;
+		}
+
+		if (shape === "diamond") {
+			ctx.beginPath();
+			ctx.moveTo(x + w / 2, y);
+			ctx.lineTo(x + w, y + h / 2);
+			ctx.lineTo(x + w / 2, y + h);
+			ctx.lineTo(x, y + h / 2);
+			ctx.closePath();
+			ctx.fill();
+			return;
+		}
+
+		if (shape === "rounded" || shape === "extra-rounded") {
+			radiusRatio = shape === "extra-rounded" ? 0.5 : 0.35;
+			ctx.beginPath();
+			_canvasRoundRect(
+				ctx, x, y, w, h,
+				(!neighbors.t && !neighbors.l) ? w * radiusRatio : 0,
+				(!neighbors.t && !neighbors.r) ? w * radiusRatio : 0,
+				(!neighbors.b && !neighbors.r) ? w * radiusRatio : 0,
+				(!neighbors.b && !neighbors.l) ? w * radiusRatio : 0
+			);
+			ctx.fill();
+			return;
+		}
+
+		ctx.fillRect(x, y, w + 0.5, h + 0.5);
+	}
+
+	function _canvasDrawFinder(ctx, x, y, moduleW, moduleH, outerShape, innerShape, colorDark) {
+		_canvasFillRing(ctx, x, y, moduleW * 7, moduleH * 7, moduleW, moduleH, moduleW * 5, moduleH * 5, outerShape, colorDark);
+		_canvasFillShape(ctx, x + moduleW * 2, y + moduleH * 2, moduleW * 3, moduleH * 3, innerShape, colorDark);
+	}
+
+	function _canvasDrawAlignment(ctx, x, y, moduleW, moduleH, shape, colorDark) {
+		var eyeShape = shape === "leaf" ? "square" : shape;
+
+		_canvasFillRing(ctx, x, y, moduleW * 5, moduleH * 5, moduleW, moduleH, moduleW * 3, moduleH * 3, shape, colorDark);
+		_canvasFillShape(ctx, x + moduleW * 2, y + moduleH * 2, moduleW, moduleH, eyeShape, colorDark);
+	}
+
+	function _svgRoundRectPath(x, y, w, h, rtl, rtr, rbr, rbl) {
+		rtl = _clampRadius(rtl, w, h);
+		rtr = _clampRadius(rtr, w, h);
+		rbr = _clampRadius(rbr, w, h);
+		rbl = _clampRadius(rbl, w, h);
+
+		return "M" + (x + rtl) + "," + y +
+			"H" + (x + w - rtr) +
+			(rtr ? ("A" + rtr + "," + rtr + " 0 0 1 " + (x + w) + "," + (y + rtr)) : "") +
+			"V" + (y + h - rbr) +
+			(rbr ? ("A" + rbr + "," + rbr + " 0 0 1 " + (x + w - rbr) + "," + (y + h)) : "") +
+			"H" + (x + rbl) +
+			(rbl ? ("A" + rbl + "," + rbl + " 0 0 1 " + x + "," + (y + h - rbl)) : "") +
+			"V" + (y + rtl) +
+			(rtl ? ("A" + rtl + "," + rtl + " 0 0 1 " + (x + rtl) + "," + y) : "") +
+			"Z";
+	}
+
+	function _svgShapePath(x, y, size, shape) {
+		var radii;
+		var r;
+		var cx;
+		var cy;
+
+		if (shape === "circle") {
+			r = size / 2;
+			cx = x + r;
+			cy = y + r;
+			return "M" + (cx - r) + "," + cy +
+				"a" + r + "," + r + " 0 1 1 " + size + ",0" +
+				"a" + r + "," + r + " 0 1 1 " + (-size) + ",0z";
+		}
+
+		if (shape === "diamond") {
+			return "M" + (x + size / 2) + "," + y +
+				"L" + (x + size) + "," + (y + size / 2) +
+				"L" + (x + size / 2) + "," + (y + size) +
+				"L" + x + "," + (y + size / 2) + "Z";
+		}
+
+		radii = _shapeCornerRadii(shape, size);
+		return _svgRoundRectPath(x, y, size, size, radii.tl, radii.tr, radii.br, radii.bl);
+	}
+
+	function _svgShapeElement(makeSVG, x, y, size, shape, fill) {
+		var radii;
+
+		if (shape === "circle") {
+			return makeSVG("circle", {
+				cx: x + size / 2,
+				cy: y + size / 2,
+				r: size / 2,
+				fill: fill
+			});
+		}
+
+		if (shape === "diamond") {
+			return makeSVG("polygon", {
+				points: (x + size / 2) + "," + y + " " +
+					(x + size) + "," + (y + size / 2) + " " +
+					(x + size / 2) + "," + (y + size) + " " +
+					x + "," + (y + size / 2),
+				fill: fill
+			});
+		}
+
+		radii = _shapeCornerRadii(shape, size);
+		if (!radii.tl && !radii.tr && !radii.br && !radii.bl) {
+			return makeSVG("rect", { x: x, y: y, width: size, height: size, fill: fill });
+		}
+
+		return makeSVG("path", {
+			d: _svgShapePath(x, y, size, shape),
+			fill: fill
+		});
+	}
+
+	function _svgRingElement(makeSVG, x, y, outerSize, holeSize, shape, fill) {
+		var inset = (outerSize - holeSize) / 2;
+		return makeSVG("path", {
+			d: _svgShapePath(x, y, outerSize, shape) + _svgShapePath(x + inset, y + inset, holeSize, shape),
+			fill: fill,
+			"fill-rule": "evenodd"
+		});
+	}
+
+	function _svgModuleElement(makeSVG, x, y, size, shape, neighbors, fill) {
+		var radiusRatio;
+		var r;
+
+		if (shape === "dots") {
+			return makeSVG("circle", {
+				cx: x + size / 2,
+				cy: y + size / 2,
+				r: size * 0.4,
+				fill: fill
+			});
+		}
+
+		if (shape === "diamond") {
+			return makeSVG("polygon", {
+				points: (x + size / 2) + "," + y + " " +
+					(x + size) + "," + (y + size / 2) + " " +
+					(x + size / 2) + "," + (y + size) + " " +
+					x + "," + (y + size / 2),
+				fill: fill
+			});
+		}
+
+		if (shape === "rounded" || shape === "extra-rounded") {
+			radiusRatio = shape === "extra-rounded" ? 0.5 : 0.35;
+			r = size * radiusRatio;
+			return makeSVG("path", {
+				d: _svgRoundRectPath(
+					x, y, size, size,
+					(!neighbors.t && !neighbors.l) ? r : 0,
+					(!neighbors.t && !neighbors.r) ? r : 0,
+					(!neighbors.b && !neighbors.r) ? r : 0,
+					(!neighbors.b && !neighbors.l) ? r : 0
+				),
+				fill: fill
+			});
+		}
+
+		return makeSVG("rect", { x: x, y: y, width: size, height: size, fill: fill });
+	}
+
+	function _svgAppendFinder(svg, makeSVG, x, y, outerShape, innerShape, colorDark) {
+		svg.appendChild(_svgRingElement(makeSVG, x, y, 7, 5, outerShape, colorDark));
+		svg.appendChild(_svgShapeElement(makeSVG, x + 2, y + 2, 3, innerShape, colorDark));
+	}
+
+	function _svgAppendAlignment(svg, makeSVG, x, y, shape, colorDark) {
+		svg.appendChild(_svgRingElement(makeSVG, x, y, 5, 3, shape, colorDark));
+		svg.appendChild(_svgShapeElement(makeSVG, x + 2, y + 2, 1, shape === "leaf" ? "square" : shape, colorDark));
+	}
+
+	function _makeSVGNode(tag, attrs) {
+		var el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+		var k;
+		for (k in attrs) {
+			if (attrs.hasOwnProperty(k) && attrs[k] != null) {
+				el.setAttribute(k, attrs[k]);
+			}
+		}
+		return el;
+	}
+
+	function _createSVGElement(oQRCode, option, forExport) {
+		var nCount = oQRCode.getModuleCount();
+		var transparent = _isTransparentBackground(option);
+		var svg = _makeSVGNode("svg", {
+			xmlns: "http://www.w3.org/2000/svg",
+			viewBox: "0 0 " + nCount + " " + nCount,
+			width: forExport ? String(option.width || nCount) : "100%",
+			height: forExport ? String(option.height || nCount) : "100%",
+			fill: transparent ? "none" : option.colorLight
+		});
+
+		_drawStyledQRCode(oQRCode, option, {
+			drawBackground: function () {
+				if (transparent) {
+					return;
+				}
+				svg.appendChild(_makeSVGNode("rect", {
+					fill: option.colorLight,
+					width: "100%",
+					height: "100%"
+				}));
+			},
+			drawModule: function (col, row, shape, neighbors) {
+				svg.appendChild(_svgModuleElement(_makeSVGNode, col, row, 1, shape, neighbors, option.colorDark));
+			},
+			drawFinder: function (col, row, outerShape, innerShape) {
+				_svgAppendFinder(svg, _makeSVGNode, col, row, outerShape, innerShape, option.colorDark);
+			},
+			drawAlignment: function (col, row, shape) {
+				_svgAppendAlignment(svg, _makeSVGNode, col, row, shape, option.colorDark);
+			}
+		});
+
+		return svg;
+	}
+
+	function _createSVGString(oQRCode, option) {
+		return new XMLSerializer().serializeToString(_createSVGElement(oQRCode, option, true));
+	}
+
+	function _paintOnCanvas(ctx, oQRCode, option, width, height) {
+		var nCount = oQRCode.getModuleCount();
+		var nWidth = width / nCount;
+		var nHeight = height / nCount;
+
+		ctx.clearRect(0, 0, width, height);
+
+		_drawStyledQRCode(oQRCode, option, {
+			drawBackground: function () {
+				if (_isTransparentBackground(option)) {
+					return;
+				}
+				ctx.fillStyle = option.colorLight;
+				ctx.fillRect(0, 0, width, height);
+			},
+			drawModule: function (col, row, shape, neighbors) {
+				ctx.fillStyle = option.colorDark;
+				_canvasFillModule(ctx, col * nWidth, row * nHeight, nWidth, nHeight, shape, neighbors);
+			},
+			drawFinder: function (col, row, outerShape, innerShape) {
+				_canvasDrawFinder(ctx, col * nWidth, row * nHeight, nWidth, nHeight, outerShape, innerShape, option.colorDark);
+			},
+			drawAlignment: function (col, row, shape) {
+				_canvasDrawAlignment(ctx, col * nWidth, row * nHeight, nWidth, nHeight, shape, option.colorDark);
+			}
+		});
+	}
+
+	function _renderExportCanvas(oQRCode, option, size) {
+		var canvas = document.createElement("canvas");
+		var width = size || option.width || 256;
+		var height = size || option.height || width;
+
+		canvas.width = width;
+		canvas.height = height;
+		_paintOnCanvas(canvas.getContext("2d"), oQRCode, option, width, height);
+		return canvas;
+	}
+
+	function _triggerDownload(filename, data, mime) {
+		var url;
+		var revoke = false;
+		var link = document.createElement("a");
+
+		if (typeof Blob !== "undefined" && data instanceof Blob) {
+			url = URL.createObjectURL(data);
+			revoke = true;
+		} else if (typeof data === "string" && data.indexOf("data:") === 0) {
+			url = data;
+		} else {
+			url = URL.createObjectURL(new Blob([data], { type: mime || "application/octet-stream" }));
+			revoke = true;
+		}
+
+		link.href = url;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+
+		if (revoke) {
+			setTimeout(function () {
+				URL.revokeObjectURL(url);
+			}, 1000);
+		}
+	}
+
+	function _drawStyledQRCode(oQRCode, option, helpers) {
+		var nCount = oQRCode.getModuleCount();
+		var shapes = _resolveShapes(option);
+		var centers = _alignmentCenters(oQRCode.typeNumber, nCount);
+		var row, col, i;
+
+		helpers.drawBackground();
+
+		for (row = 0; row < nCount; row++) {
+			for (col = 0; col < nCount; col++) {
+				if (!oQRCode.isDark(row, col)) {
+					continue;
+				}
+				if (_isFinderModule(row, col, nCount) || _isAlignmentModule(row, col, centers)) {
+					continue;
+				}
+				helpers.drawModule(col, row, shapes.module, _moduleNeighbors(oQRCode, row, col));
+			}
+		}
+
+		helpers.drawFinder(0, 0, shapes.marker, shapes.markerInner);
+		helpers.drawFinder(nCount - 7, 0, shapes.marker, shapes.markerInner);
+		helpers.drawFinder(0, nCount - 7, shapes.marker, shapes.markerInner);
+
+		for (i = 0; i < centers.length; i++) {
+			helpers.drawAlignment(centers[i].col - 2, centers[i].row - 2, shapes.alignment);
+		}
+	}
 	
 	var svgDrawer = (function() {
 
@@ -180,37 +713,8 @@ var QRCode;
 		};
 
 		Drawing.prototype.draw = function (oQRCode) {
-			var _htOption = this._htOption;
-			var _el = this._el;
-			var nCount = oQRCode.getModuleCount();
-			var nWidth = Math.floor(_htOption.width / nCount);
-			var nHeight = Math.floor(_htOption.height / nCount);
-
 			this.clear();
-
-			function makeSVG(tag, attrs) {
-				var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-				for (var k in attrs)
-					if (attrs.hasOwnProperty(k)) el.setAttribute(k, attrs[k]);
-				return el;
-			}
-
-			var svg = makeSVG("svg" , {'viewBox': '0 0 ' + String(nCount) + " " + String(nCount), 'width': '100%', 'height': '100%', 'fill': _htOption.colorLight});
-			svg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", "http://www.w3.org/1999/xlink");
-			_el.appendChild(svg);
-
-			svg.appendChild(makeSVG("rect", {"fill": _htOption.colorLight, "width": "100%", "height": "100%"}));
-			svg.appendChild(makeSVG("rect", {"fill": _htOption.colorDark, "width": "1", "height": "1", "id": "template"}));
-
-			for (var row = 0; row < nCount; row++) {
-				for (var col = 0; col < nCount; col++) {
-					if (oQRCode.isDark(row, col)) {
-						var child = makeSVG("use", {"x": String(col), "y": String(row)});
-						child.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#template")
-						svg.appendChild(child);
-					}
-				}
-			}
+			this._el.appendChild(_createSVGElement(oQRCode, this._htOption, false));
 		};
 		Drawing.prototype.clear = function () {
 			while (this._el.hasChildNodes())
@@ -239,13 +743,26 @@ var QRCode;
 			var nCount = oQRCode.getModuleCount();
 			var nWidth = Math.floor(_htOption.width / nCount);
 			var nHeight = Math.floor(_htOption.height / nCount);
+			var shapes = _resolveShapes(_htOption);
 			var aHTML = ['<table style="border:0;border-collapse:collapse;">'];
+			var moduleRadius = "0";
+			var moduleClip = "";
+
+			if (shapes.module === "dots") {
+				moduleRadius = "50%";
+			} else if (shapes.module === "rounded") {
+				moduleRadius = "35%";
+			} else if (shapes.module === "extra-rounded") {
+				moduleRadius = "50%";
+			} else if (shapes.module === "diamond") {
+				moduleClip = "clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);";
+			}
 			
 			for (var row = 0; row < nCount; row++) {
 				aHTML.push('<tr>');
 				
 				for (var col = 0; col < nCount; col++) {
-					aHTML.push('<td style="border:0;border-collapse:collapse;padding:0;margin:0;width:' + nWidth + 'px;height:' + nHeight + 'px;background-color:' + (oQRCode.isDark(row, col) ? _htOption.colorDark : _htOption.colorLight) + ';"></td>');
+					aHTML.push('<td style="border:0;border-collapse:collapse;padding:0;margin:0;width:' + nWidth + 'px;height:' + nHeight + 'px;background-color:' + (oQRCode.isDark(row, col) ? _htOption.colorDark : (_isTransparentBackground(_htOption) ? "transparent" : _htOption.colorLight)) + ';border-radius:' + (oQRCode.isDark(row, col) ? moduleRadius : "0") + ';' + (oQRCode.isDark(row, col) ? moduleClip : "") + '"></td>');
 				}
 				
 				aHTML.push('</tr>');
@@ -375,45 +892,11 @@ var QRCode;
 		 */
 		Drawing.prototype.draw = function (oQRCode) {
             var _elImage = this._elImage;
-            var _oContext = this._oContext;
             var _htOption = this._htOption;
-            
-			var nCount = oQRCode.getModuleCount();
-			var nWidth = _htOption.width / nCount;
-			var nHeight = _htOption.height / nCount;
-			var nRoundedWidth = Math.round(nWidth);
-			var nRoundedHeight = Math.round(nHeight);
 
 			_elImage.style.display = "none";
 			this.clear();
-			
-			for (var row = 0; row < nCount; row++) {
-				for (var col = 0; col < nCount; col++) {
-					var bIsDark = oQRCode.isDark(row, col);
-					var nLeft = col * nWidth;
-					var nTop = row * nHeight;
-					_oContext.strokeStyle = bIsDark ? _htOption.colorDark : _htOption.colorLight;
-					_oContext.lineWidth = 1;
-					_oContext.fillStyle = bIsDark ? _htOption.colorDark : _htOption.colorLight;					
-					_oContext.fillRect(nLeft, nTop, nWidth, nHeight);
-					
-					// 안티 앨리어싱 방지 처리
-					_oContext.strokeRect(
-						Math.floor(nLeft) + 0.5,
-						Math.floor(nTop) + 0.5,
-						nRoundedWidth,
-						nRoundedHeight
-					);
-					
-					_oContext.strokeRect(
-						Math.ceil(nLeft) - 0.5,
-						Math.ceil(nTop) - 0.5,
-						nRoundedWidth,
-						nRoundedHeight
-					);
-				}
-			}
-			
+			_paintOnCanvas(this._oContext, oQRCode, _htOption, _htOption.width, _htOption.height);
 			this._bIsPainted = true;
 		};
 			
@@ -530,7 +1013,12 @@ var QRCode;
 	 * @param {Number} [vOption.height=256]
 	 * @param {String} [vOption.colorDark="#000000"]
 	 * @param {String} [vOption.colorLight="#ffffff"]
-	 * @param {QRCode.CorrectLevel} [vOption.correctLevel=QRCode.CorrectLevel.H] [L|M|Q|H] 
+	 * @param {Boolean} [vOption.transparent=false] Skip the light fill so the background is transparent
+	 * @param {QRCode.CorrectLevel} [vOption.correctLevel=QRCode.CorrectLevel.H] [L|M|Q|H]
+	 * @param {String} [vOption.moduleShape="square"] Data modules: square|rounded|extra-rounded|dots|diamond
+	 * @param {String} [vOption.markerShape="square"] Finder markers: square|rounded|extra-rounded|circle|leaf
+	 * @param {String} [vOption.markerInnerShape] Finder eyes; defaults to markerShape (square|rounded|extra-rounded|circle|diamond)
+	 * @param {String} [vOption.alignmentShape] Alignment (edge) markers; defaults to markerShape
 	 */
 	QRCode = function (el, vOption) {
 		this._htOption = {
@@ -539,7 +1027,12 @@ var QRCode;
 			typeNumber : 4,
 			colorDark : "#000000",
 			colorLight : "#ffffff",
-			correctLevel : QRErrorCorrectLevel.H
+			transparent : false,
+			correctLevel : QRErrorCorrectLevel.H,
+			moduleShape : "square",
+			markerShape : "square",
+			markerInnerShape : undefined,
+			alignmentShape : undefined
 		};
 		
 		if (typeof vOption === 'string') {
@@ -606,9 +1099,82 @@ var QRCode;
 	QRCode.prototype.clear = function () {
 		this._oDrawing.clear();
 	};
+
+	/**
+	 * SVG markup for the current QR code. Vector, so it scales to any size.
+	 *
+	 * @return {String}
+	 */
+	QRCode.prototype.getSVG = function () {
+		if (!this._oQRCode) {
+			throw new Error("QRCode is not generated yet");
+		}
+		return _createSVGString(this._oQRCode, this._htOption);
+	};
+
+	/**
+	 * Download the current QR code as an SVG file.
+	 *
+	 * @param {String} [filename="qrcode.svg"]
+	 */
+	QRCode.prototype.downloadSVG = function (filename) {
+		_triggerDownload(filename || "qrcode.svg", this.getSVG(), "image/svg+xml;charset=utf-8");
+	};
+
+	/**
+	 * PNG data URL of the current QR code.
+	 *
+	 * @param {Number} [size] Pixel width/height. Defaults to the constructor width.
+	 * @return {String}
+	 */
+	QRCode.prototype.getDataURL = function (size) {
+		if (!this._oQRCode) {
+			throw new Error("QRCode is not generated yet");
+		}
+		return _renderExportCanvas(this._oQRCode, this._htOption, size).toDataURL("image/png");
+	};
+
+	/**
+	 * Download the current QR code as a PNG. Pass a large size (2048, 4096, ...) for print use.
+	 *
+	 * @param {String} [filename="qrcode.png"]
+	 * @param {Number} [size=2048]
+	 */
+	QRCode.prototype.downloadPNG = function (filename, size) {
+		var canvas;
+
+		if (!this._oQRCode) {
+			throw new Error("QRCode is not generated yet");
+		}
+
+		filename = filename || "qrcode.png";
+		canvas = _renderExportCanvas(this._oQRCode, this._htOption, size || 2048);
+
+		if (typeof canvas.toBlob === "function") {
+			canvas.toBlob(function (blob) {
+				_triggerDownload(filename, blob, "image/png");
+			}, "image/png");
+			return;
+		}
+
+		_triggerDownload(filename, canvas.toDataURL("image/png"));
+	};
 	
 	/**
 	 * @name QRCode.CorrectLevel
 	 */
 	QRCode.CorrectLevel = QRErrorCorrectLevel;
+
+	/**
+	 * @name QRCode.Shape
+	 */
+	QRCode.Shape = {
+		Square: "square",
+		Rounded: "rounded",
+		ExtraRounded: "extra-rounded",
+		Dots: "dots",
+		Circle: "circle",
+		Diamond: "diamond",
+		Leaf: "leaf"
+	};
 })();
